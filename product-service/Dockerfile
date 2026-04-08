@@ -1,21 +1,18 @@
-# Dockerfile (dùng chung cho product-service và order-service)
-# Dùng multi-stage build để giảm kích thước image
-# Stage 1: Build
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
-# Chỉ áp dụng cho product-service (có Prisma)
 COPY prisma ./prisma
+COPY prisma.config.ts ./
 RUN npx prisma generate
 
-# Stage 2: Production
 FROM node:20-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY src ./src
 COPY package.json ./
 EXPOSE 3001
-CMD ["node", "src/index.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node src/index.js"]
