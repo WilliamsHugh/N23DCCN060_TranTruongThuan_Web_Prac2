@@ -1,4 +1,3 @@
-// src/app.js
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -8,39 +7,30 @@ const swaggerSpec = require("./swagger/swagger");
 const productRoutes = require("./routes/productRoutes");
 const errorHandler = require("./middleware/errorHandler");
 require("dotenv").config();
+
 const app = express();
 
-// ─── Security & Logging Middleware ───────────
-app.use(helmet()); // Bảo mật HTTP headers
+app.use(helmet());
 app.use(cors());
-app.use(morgan("dev")); // Log requests
+app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ─── Swagger UI ──────────────────────────────
-app.use(
-  "/api-docs",
-  swaggerUi.serve,
-  swaggerUi.setup(swaggerSpec, {
-    swaggerOptions: { persistAuthorization: true },
+// Swagger UI
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
     customSiteTitle: "Product Service API Docs",
-  }),
-);
-
-// Export spec dạng JSON để tích hợp với API Gateway
+}));
 app.get("/api-docs.json", (req, res) => res.json(swaggerSpec));
 
-// ─── Routes ──────────────────────────────────
-app.get("/health", (req, res) =>
-  res.json({
+// Routes
+app.get("/health", (req, res) => res.json({
     status: "ok",
     service: process.env.SERVICE_NAME,
-    uptime: process.uptime(),
-  }),
-);
+    uptime: process.uptime()
+}));
 app.use("/api/products", productRoutes);
 
-// ─── Global Error Handler (ĐẶT CUỐI CÙNG) ──
+// Error Handler — phải đặt cuối cùng
 app.use(errorHandler);
 
 module.exports = app;

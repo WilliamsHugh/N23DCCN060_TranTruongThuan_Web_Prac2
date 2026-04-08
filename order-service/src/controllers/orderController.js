@@ -68,6 +68,15 @@ const getOrdersByCustomer = async (req, res, next) => {
   }
 };
 
+// Lấy đơn hàng theo mã đơn hàng
+const getOrderById = async (req, res, next) => {
+    try {
+        const order = await Order.findById(req.params.id);
+        if (!order) return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng" });
+        res.json({ success: true, data: order });
+    } catch (error) { next(error); }
+};
+
 // Cập nhật trạng thái đơn hàng
 const updateOrderStatus = async (req, res, next) => {
   try {
@@ -87,4 +96,4 @@ const updateOrderStatus = async (req, res, next) => {
   }
 };
 
-module.exports = { createOrder, getOrdersByCustomer, updateOrderStatus };
+module.exports = { createOrder, getOrdersByCustomer, updateOrderStatus, getOrderById };

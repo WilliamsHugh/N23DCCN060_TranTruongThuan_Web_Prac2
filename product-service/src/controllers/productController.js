@@ -1,6 +1,5 @@
 // src/controllers/productController.js
-const { PrismaClient } = require("@prisma/client");
-const prisma = new PrismaClient();
+const prisma = require("../config/prisma");
 
 // ──────────────────────────────────
 // GET /api/products — Lấy danh sách có phân trang, lọc, sắp xếp
