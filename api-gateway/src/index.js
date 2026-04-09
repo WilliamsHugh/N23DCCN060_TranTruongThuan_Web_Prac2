@@ -3,6 +3,7 @@ const proxy = require("express-http-proxy");
 const rateLimit = require("express-rate-limit");
 const cors = require("cors");
 const helmet = require("helmet");
+const authenticate = require("./middleware/auth");
 require("dotenv").config();
 
 const app = express();
@@ -16,19 +17,18 @@ app.use(limiter);
 
 app.get("/health", (req, res) => res.json({ status: "ok", gateway: true }));
 
-// Route: /api/products/* → Product Service
+// Public routes
+app.use("/api/auth", proxy(process.env.AUTH_SERVICE_URL, {
+    proxyReqPathResolver: (req) => `/api/auth${req.url}`
+}));
+
 app.use("/api/products", proxy(process.env.PRODUCT_SERVICE_URL, {
     proxyReqPathResolver: (req) => `/api/products${req.url}`
 }));
 
-// Route: /api/orders/* → Order Service
-app.use("/api/orders", proxy(process.env.ORDER_SERVICE_URL, {
+// Protected routes — cần JWT
+app.use("/api/orders", authenticate, proxy(process.env.ORDER_SERVICE_URL, {
     proxyReqPathResolver: (req) => `/api/orders${req.url}`
-}));
-
-// Route: /api/auth/* → Auth Service  ← thêm vào
-app.use("/api/auth", proxy(process.env.AUTH_SERVICE_URL, {
-    proxyReqPathResolver: (req) => `/api/auth${req.url}`
 }));
 
 app.use((req, res) => {
