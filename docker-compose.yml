@@ -18,6 +18,7 @@ services:
       POSTGRES_DB: products_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
     ports:
       - "5432:5432"
     networks: [microservices-net]
@@ -73,6 +74,23 @@ services:
       mongo: { condition: service_healthy }
     networks: [microservices-net]
 
+  auth-service:
+    build: ./auth-service
+    container_name: auth_service
+    environment:
+      NODE_ENV: production
+      PORT: 3003
+      SERVICE_NAME: auth-service
+      DATABASE_URL: postgresql://admin:secret@postgres:5432/auth_db
+      JWT_SECRET: your-super-secret-random-string-at-least-32-chars
+      JWT_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+    ports:
+      - "3003:3003"
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [microservices-net]
+
   api-gateway:
     build: ./api-gateway
     container_name: api_gateway
@@ -81,6 +99,7 @@ services:
       PORT: 3000
       PRODUCT_SERVICE_URL: http://product-service:3001
       ORDER_SERVICE_URL: http://order-service:3002
+      AUTH_SERVICE_URL: http://auth-service:3003
     ports:
       - "3000:3000"
     depends_on: [product-service, order-service]

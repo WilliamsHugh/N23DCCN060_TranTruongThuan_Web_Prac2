@@ -6,7 +6,6 @@ const helmet = require("helmet");
 require("dotenv").config();
 
 const app = express();
-
 app.use(helmet());
 app.use(cors({
     origin: process.env.ALLOWED_ORIGINS?.split(",") || "*"
@@ -25,6 +24,11 @@ app.use("/api/products", proxy(process.env.PRODUCT_SERVICE_URL, {
 // Route: /api/orders/* → Order Service
 app.use("/api/orders", proxy(process.env.ORDER_SERVICE_URL, {
     proxyReqPathResolver: (req) => `/api/orders${req.url}`
+}));
+
+// Route: /api/auth/* → Auth Service  ← thêm vào
+app.use("/api/auth", proxy(process.env.AUTH_SERVICE_URL, {
+    proxyReqPathResolver: (req) => `/api/auth${req.url}`
 }));
 
 app.use((req, res) => {
