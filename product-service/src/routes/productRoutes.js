@@ -1,9 +1,14 @@
 const router = require("express").Router();
 const {
-    getProducts, getProductById,
-    createProduct, updateProduct, deleteProduct
+  getProducts,
+  getProductById,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  uploadProductImage,
 } = require("../controllers/productController");
 const { productValidation } = require("../middleware/validate");
+const { upload } = require("../config/cloudinary");
 
 /**
  * @swagger
@@ -135,5 +140,36 @@ router.put("/:id", updateProduct);
  *         description: Đã ẩn sản phẩm
  */
 router.delete("/:id", deleteProduct);
+
+/**
+ * @swagger
+ * /api/products/{id}/image:
+ *   post:
+ *     summary: Upload ảnh sản phẩm lên Cloudinary
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Upload thành công, trả về product với imageUrl mới
+ *       400:
+ *         description: Chưa chọn file ảnh
+ *       404:
+ *         description: Không tìm thấy sản phẩm
+ */
+router.post("/:id/image", upload.single("image"), uploadProductImage);
 
 module.exports = router;

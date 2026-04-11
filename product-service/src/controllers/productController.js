@@ -1,5 +1,16 @@
 // src/controllers/productController.js
 const prisma = require("../config/prisma");
+const { cloudinary } = require("../config/cloudinary");
+const redis = require("../config/redis");
+
+const CACHE_TTL = 300; // 5 phút
+const CACHE_PREFIX = "products";
+
+// Helper: xoá toàn bộ cache liên quan products
+const clearProductCache = async () => {
+  const keys = await redis.keys(`${CACHE_PREFIX}:*`);
+  if (keys.length > 0) await redis.del(...keys);
+};
 
 // ──────────────────────────────────
 // GET /api/products — Lấy danh sách có phân trang, lọc, sắp xếp
@@ -17,8 +28,15 @@ const getProducts = async (req, res, next) => {
       maxPrice,
       inStock,
     } = req.query;
+
+    // Tạo cache key từ query params
+    const cacheKey = `${CACHE_PREFIX}:list:${JSON.stringify(req.query)}`;
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      return res.json(JSON.parse(cached));
+    }
+
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    // Xây dựng điều kiện filter
     const where = {
       isActive: true,
       ...(search && { name: { contains: search, mode: "insensitive" } }),
@@ -31,7 +49,7 @@ const getProducts = async (req, res, next) => {
       }),
       ...(inStock === "true" && { stock: { gt: 0 } }),
     };
-    // Chạy song song 2 queries
+
     const [products, total] = await Promise.all([
       prisma.product.findMany({
         where,
@@ -42,7 +60,8 @@ const getProducts = async (req, res, next) => {
       }),
       prisma.product.count({ where }),
     ]);
-    res.json({
+
+    const result = {
       success: true,
       data: products,
       pagination: {
@@ -51,9 +70,14 @@ const getProducts = async (req, res, next) => {
         limit: parseInt(limit),
         totalPages: Math.ceil(total / parseInt(limit)),
       },
-    });
+    };
+
+    // Lưu vào cache 5 phút
+    await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(result));
+
+    res.json(result);
   } catch (error) {
-    next(error); // Chuyển lỗi sang errorHandler
+    next(error);
   }
 };
 
@@ -62,15 +86,26 @@ const getProducts = async (req, res, next) => {
 // ──────────────────────────────────
 const getProductById = async (req, res, next) => {
   try {
+    const cacheKey = `${CACHE_PREFIX}:${req.params.id}`;
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      return res.json(JSON.parse(cached));
+    }
+
     const product = await prisma.product.findUnique({
       where: { id: parseInt(req.params.id) },
       include: { category: true },
     });
+
     if (!product)
       return res
         .status(404)
         .json({ success: false, message: "Không tìm thấy sản phẩm" });
-    res.json({ success: true, data: product });
+
+    const result = { success: true, data: product };
+    await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(result));
+
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -90,13 +125,14 @@ const createProduct = async (req, res, next) => {
       data: { name, slug, price, description, stock, imageUrl, categoryId },
       include: { category: true },
     });
-    res
-      .status(201)
-      .json({
-        success: true,
-        data: product,
-        message: "Tạo sản phẩm thành công",
-      });
+
+    await clearProductCache();
+
+    res.status(201).json({
+      success: true,
+      data: product,
+      message: "Tạo sản phẩm thành công",
+    });
   } catch (error) {
     next(error);
   }
@@ -112,6 +148,9 @@ const updateProduct = async (req, res, next) => {
       data: req.body,
       include: { category: true },
     });
+
+    await clearProductCache();
+
     res.json({ success: true, data: product, message: "Cập nhật thành công" });
   } catch (error) {
     next(error);
@@ -125,17 +164,57 @@ const deleteProduct = async (req, res, next) => {
   try {
     await prisma.product.update({
       where: { id: parseInt(req.params.id) },
-      data: { isActive: false }, // Soft delete — không xoá thật
+      data: { isActive: false },
     });
+
+    await clearProductCache();
+
     res.json({ success: true, message: "Đã ẩn sản phẩm thành công" });
   } catch (error) {
     next(error);
   }
 };
+
+// ──────────────────────────────────
+// POST /api/products/:id/image — Upload ảnh lên Cloudinary
+// ──────────────────────────────────
+const uploadProductImage = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Chưa chọn file ảnh" });
+    }
+
+    const imageUrl = req.file.path; // Cloudinary trả về URL đầy đủ
+
+    const product = await prisma.product.update({
+      where: { id: parseInt(req.params.id) },
+      data: { imageUrl },
+      include: { category: true },
+    });
+
+    await clearProductCache();
+
+    res.json({
+      success: true,
+      data: product,
+      message: "Upload ảnh thành công",
+    });
+  } catch (error) {
+    // Nếu lỗi DB, xoá ảnh đã upload trên Cloudinary
+    if (req.file?.filename) {
+      await cloudinary.uploader.destroy(req.file.filename).catch(() => {});
+    }
+    next(error);
+  }
+};
+
 module.exports = {
   getProducts,
   getProductById,
   createProduct,
   updateProduct,
   deleteProduct,
+  uploadProductImage,
 };
