@@ -1,0 +1,73 @@
+# docker-compose.dev.yml — Override cho môi trường Development
+# Chạy bằng: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+version: "3.9"
+
+services:
+  postgres:
+    ports:
+      - "5432:5432" # Expose ra ngoài để dùng Prisma Studio / DBeaver
+
+  mongo:
+    ports:
+      - "27017:27017" # Expose ra ngoài để dùng MongoDB Compass
+
+  product-service:
+    build:
+      context: ./product-service
+      target: builder # Dùng stage builder thay vì production
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      SERVICE_NAME: product-service
+      DATABASE_URL: postgresql://admin:secret@postgres:5432/products_db
+      DIRECT_URL: postgresql://admin:secret@postgres:5432/products_db
+    volumes:
+      - ./product-service/src:/app/src # Hot reload — mount source code
+      - ./product-service/prisma:/app/prisma
+    command: sh -c "npx prisma migrate deploy && npx nodemon src/index.js"
+
+  order-service:
+    build:
+      context: ./order-service
+      target: builder
+    environment:
+      NODE_ENV: development
+      PORT: 3002
+      SERVICE_NAME: order-service
+      MONGODB_URI: mongodb://admin:secret@mongo:27017/orders_db?authSource=admin
+    volumes:
+      - ./order-service/src:/app/src
+    command: npx nodemon src/index.js
+
+  auth-service:
+    build:
+      context: ./auth-service
+      target: builder
+    environment:
+      NODE_ENV: development
+      PORT: 3003
+      SERVICE_NAME: auth-service
+      DATABASE_URL: postgresql://admin:secret@postgres:5432/auth_db
+      DIRECT_URL: postgresql://admin:secret@postgres:5432/auth_db
+      JWT_SECRET: dev-secret-key-for-local-only
+      JWT_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+    volumes:
+      - ./auth-service/src:/app/src
+      - ./auth-service/prisma:/app/prisma
+    command: sh -c "npx prisma migrate deploy && npx nodemon src/index.js"
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+      target: builder
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      PRODUCT_SERVICE_URL: http://product-service:3001
+      ORDER_SERVICE_URL: http://order-service:3002
+      AUTH_SERVICE_URL: http://auth-service:3003
+      JWT_SECRET: dev-secret-key-for-local-only
+    volumes:
+      - ./api-gateway/src:/app/src
+    command: npx nodemon src/index.js
